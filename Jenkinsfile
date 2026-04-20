@@ -1,50 +1,75 @@
 pipeline {
     agent any
+    tools {
+        jdk 'Jdk-17'
+        maven 'Maven'
+    }
     environment {
         AWS_REGION = 'ap-south-1'
-        ECR_REPO = '148761684695.dkr.ecr.ap-south-1.amazonaws.com/spring-petclinic:1.0'
+        ECR_REPO = '148761684695.dkr.ecr.ap-south-1.amazonaws.com/spring-petclinic'
         IMAGE_TAG = '1.0'
-        SONAR_HOST_URL = 'https://13.201.128.242:9000'
     }
+
     stages {
-        stage('Clone Repository') {
+        stage('Git Checkout') {
             steps {
-                git url: 'https://github.com/venkeyboda07/Jenkins-ECR-K8S-cicd-pipeline.git', branch: 'main'
+                git branch: 'main', url: 'https://github.com/venkeyboda07/Jenkins-ECR-K8S-cicd-pipeline.git'
             }
         }
-        
-        stage('Build Docker Image') {
+
+        stage('SonarQube Analysis') {
             steps {
-                sh 'docker build -t spc:1.0 .'
-            }
-        }
-        
-        stage('Push to ECR') {
-            steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws cred']]) {
+                withCredentials([string(credentialsId: 'sonar-credentials', variable: 'SONAR_TOKEN')]) {
                     sh '''
-                    aws ecr get-login-password --region ap-south-1 | \
-                    docker login --username AWS --password-stdin 148761684695.dkr.ecr.ap-south-1.amazonaws.com
-        
-                    docker tag spc:1.0 148761684695.dkr.ecr.ap-south-1.amazonaws.com/spring-petclinic:1.0
-        
-                    docker push 148761684695.dkr.ecr.ap-south-1.amazonaws.com/spring-petclinic:1.0
+                        mvn clean verify sonar:sonar \
+                        -Dsonar.projectKey=spc \
+                        -Dsonar.host.url=https://13.201.128.242:9000 \
+                        -Dsonar.login=$SONAR_TOKEN
                     '''
                 }
             }
         }
-        stage('Build & Test') {
+
+        stage('Build Docker Image') {
             steps {
-                sh 'mvn clean verify'
+                sh "docker image build -t spc:$IMAGE_TAG ."
             }
         }
-        
-        stage('SonarQube Analysis') {
+
+        stage('Login to AWS ECR') {
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh 'mvn sonar:sonar -Dsonar.projectKey=my-app -Dsonar.host.url=$SONAR_HOST_URL'
+                sh "aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO"
+            }
+        }
+
+        stage('Tag and Push to ECR') {
+            steps {
+                sh "docker image tag spc:$IMAGE_TAG $ECR_REPO:$IMAGE_TAG"
+                sh "docker image push $ECR_REPO:$IMAGE_TAG"
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    dir('Manifest') {  // Changed directory name to "Manifest"
+                        withKubeConfig(
+                            caCertificate: '', 
+                            clusterName: '', 
+                            contextName: '', 
+                            credentialsId: 'kube-credentials', // Changed credential ID
+                            namespace: '', 
+                            restrictKubeConfigAccess: false, 
+                            serverUrl: ''
+                        ) {
+                            sh 'kubectl apply -f deployment.yaml'
+                            sh 'kubectl apply -f service.yaml'
+                        }
+                    }
                 }
             }
         }
-    }
-}
+    } 
+} 
+
+
