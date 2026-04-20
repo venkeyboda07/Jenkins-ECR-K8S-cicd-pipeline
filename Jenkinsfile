@@ -1,6 +1,11 @@
 pipeline {
     agent any
-    
+    environment {
+        AWS_REGION = 'ap-south-1'
+        ECR_REPO = '148761684695.dkr.ecr.ap-south-1.amazonaws.com/spring-petclinic:1.0'
+        IMAGE_TAG = '1.0'
+        SONAR_HOST_URL = 'http://13.201.128.242:9000'
+    }
     stages {
         stage('Clone Repository') {
             steps {
@@ -25,6 +30,19 @@ pipeline {
         
                     docker push 148761684695.dkr.ecr.ap-south-1.amazonaws.com/spring-petclinic:1.0
                     '''
+                }
+            }
+        }
+        stage('Build & Test') {
+            steps {
+                sh 'mvn clean verify'
+            }
+        }
+        
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('SonarQube') {
+                    sh 'mvn sonar:sonar -Dsonar.projectKey=my-app -Dsonar.host.url=$SONAR_HOST_URL'
                 }
             }
         }
