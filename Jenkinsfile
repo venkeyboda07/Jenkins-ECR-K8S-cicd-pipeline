@@ -16,11 +16,16 @@ pipeline {
         
         stage('Push to ECR') {
             steps {
-                sh '''
-                aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin 148761684695.dkr.ecr.ap-south-1.amazonaws.com
-                docker tag spc:1.0 48761684695.dkr.ecr.ap-south-1.amazonaws.com/spc:1.0
-                docker push 48761684695.dkr.ecr.ap-south-1.amazonaws.com/spc:1.0
-                '''
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws cred']]) {
+                    sh '''
+                    aws ecr get-login-password --region ap-south-1 | \
+                    docker login --username AWS --password-stdin 148761684695.dkr.ecr.ap-south-1.amazonaws.com
+        
+                    docker tag spc:1.0 148761684695.dkr.ecr.ap-south-1.amazonaws.com/spring-petclinic:1.0
+        
+                    docker push 148761684695.dkr.ecr.ap-south-1.amazonaws.com/spring-petclinic:1.0
+                    '''
+                }
             }
         }
     }
